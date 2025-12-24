@@ -38,6 +38,7 @@ set_var() {
         _NODE="$ANIMEPAHE_DL_NODE"
     fi
     _FFMPEG="$(command -v ffmpeg)" || command_not_found "ffmpeg"
+    _YTDL="$(command -v yt-dlp)" || command_not_found "yt-dlp"
     if [[ ${_PARALLEL_JOBS:-} -gt 1 ]]; then
        _OPENSSL="$(command -v openssl)" || command_not_found "openssl"
     fi
@@ -48,8 +49,13 @@ set_var() {
     _REFERER_URL="$_HOST"
 
     _SCRIPT_PATH=$(dirname "$(realpath "$0")")
+    _SCRIPT_PATH="/Users/gyanesh/Documents/Anime/upload anime"
+    # _SCRIPT_PATH="/Volumes/data-1/downloads/qbittorrent/completed"
     _ANIME_LIST_FILE="$_SCRIPT_PATH/anime.list"
     _SOURCE_FILE=".source.json"
+    _ANIME_RESOLUTION="1080"
+    _ANIME_AUDIO="jpn"
+    # _ANIME_AUDIO="eng"
 }
 
 set_args() {
@@ -156,7 +162,6 @@ get_episode_list() {
 
 download_source() {
     local d p n
-    mkdir -p "$_SCRIPT_PATH/$_ANIME_NAME"
     d="$(get_episode_list "$_ANIME_SLUG" "1")"
     p="$("$_JQ" -r '.last_page' <<< "$d")"
 
@@ -166,6 +171,8 @@ download_source() {
             d="$(echo "$d $n" | "$_JQ" -s '.[0].data + .[1].data | {data: .}')"
         done
     fi
+
+    mkdir -p "$_SCRIPT_PATH/$_ANIME_NAME"
 
     echo "$d" > "$_SCRIPT_PATH/$_ANIME_NAME/$_SOURCE_FILE"
 }
@@ -280,7 +287,7 @@ download_file() {
     # $1: URL link
     # $2: output file
     local s
-    s=$("$_CURL" -k -sS -H "Referer: $_REFERER_URL" -H "cookie: $_COOKIE" -C - "$1" -L -g -o "$2" \
+    s=$("$_CURL" -sS -H "Referer: $_REFERER_URL" -H "cookie: $_COOKIE" -C - "$1" -L -g -o "$2" \
         --connect-timeout 5 \
         --compressed \
         || echo "$?")
@@ -366,11 +373,16 @@ download_episode() {
             generate_filelist "$plist" "${opath}/$fname"
 
             ! cd "$opath" && print_warn "Cannot change directory to $opath" && return
-            "$_FFMPEG" -f concat -safe 0 -i "$fname" -c copy $erropt -y "$v"
+            # "$_FFMPEG" -f concat -safe 0 -i "$fname" -c copy $erropt -y "$v"
+
+            print_warn "doesn't work.. Need to check how to access local m3u8 on yt-dlp"
+            print_info "3: finame: $fname"
+            "$_YTDL" --add-headers "Referer: $l" -t mp4 "$fname"
             ! cd "$cpath" && print_warn "Cannot change directory to $cpath" && return
             [[ -z "${_DEBUG_MODE:-}" ]] && rm -rf "$opath" || return 0
         else
-            "$_FFMPEG" $extpicky -headers "Referer: $_REFERER_URL" -i "$pl" -c copy $erropt -y "$v"
+            # "$_FFMPEG" $extpicky -headers "Referer: $_REFERER_URL" -i "$pl" -c copy $erropt -y "$v"
+            "$_YTDL" --add-headers "Referer: $l" -N 20 -t mp4 -o "$_SCRIPT_PATH/$_ANIME_NAME/$_ANIME_NAME ${num}.mp4" "$pl"
         fi
     else
         echo "$pl"
@@ -404,12 +416,12 @@ main() {
     set_cookie
 
     if [[ -n "${_INPUT_ANIME_NAME:-}" ]]; then
-        _ANIME_NAME=$("$_FZF" -1 <<< "$(search_anime_by_name "$_INPUT_ANIME_NAME")")
+        _ANIME_NAME=$("$_FZF" -i -1 <<< "$(search_anime_by_name "$_INPUT_ANIME_NAME")")
         _ANIME_SLUG="$(get_slug_from_name "$_ANIME_NAME")"
     else
         download_anime_list
         if [[ -z "${_ANIME_SLUG:-}" ]]; then
-            _ANIME_NAME=$("$_FZF" -1 <<< "$(remove_slug < "$_ANIME_LIST_FILE")")
+            _ANIME_NAME=$("$_FZF" -i -1 <<< "$(remove_slug < "$_ANIME_LIST_FILE")")
             _ANIME_SLUG="$(get_slug_from_name "$_ANIME_NAME")"
         fi
     fi
