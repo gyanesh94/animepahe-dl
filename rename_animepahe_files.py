@@ -1,4 +1,4 @@
-"""Rename anime episode files recursively.
+"""Rename anime episode video files recursively.
 
 Rules:
 1) If a filename starts with "AnimePahe", apply AnimePahe cleanup:
@@ -11,7 +11,7 @@ Rules:
 2) After cleanup (or for non-AnimePahe names), zero-pad the last episode number
    in each directory to a consistent width (minimum 2 digits).
 
-The renaming is performed recursively for all subdirectories.
+The renaming is performed recursively for all subdirectories for common video extensions.
 
 Examples:
 - "AnimePahe_Shigatsu_wa_Kimi_no_Uso_-_Moments_-_01_BD_1080p_Asakura.mp4"
@@ -41,6 +41,17 @@ from typing import Iterable, Iterator, Optional
 
 
 _ANIMEPAHE_PREFIX = "AnimePahe"
+
+_VIDEO_EXTENSIONS = {
+    ".avi",
+    ".m4v",
+    ".mkv",
+    ".mov",
+    ".mp4",
+    ".ts",
+    ".webm",
+    ".wmv",
+}
 
 # Common tokens that usually appear after the episode number in AnimePahe names.
 _QUALITY_TOKENS = (
@@ -171,16 +182,21 @@ def determine_episode_width(episode_numbers: Iterable[int]) -> int:
     return max(2, len(str(max_num)))
 
 
-def iter_mp4_files_by_directory(root: Path) -> Iterator[tuple[Path, list[Path]]]:
-    """Yield (directory, mp4_files_in_directory) for all directories under root."""
+def iter_video_files_by_directory(root: Path) -> Iterator[tuple[Path, list[Path]]]:
+    """Yield (directory, video_files_in_directory) for all directories under root."""
 
     for dirpath, _, filenames in os.walk(root):
         directory = Path(dirpath)
-        files = [
-            directory / name
-            for name in filenames
-            if not name.startswith(".") and name.lower().endswith(".mp4")
-        ]
+        files: list[Path] = []
+
+        for name in filenames:
+            if name.startswith("."):
+                continue
+
+            path = directory / name
+            if path.suffix.lower() in _VIDEO_EXTENSIONS:
+                files.append(path)
+
         if files:
             yield directory, files
 
@@ -190,7 +206,7 @@ def build_rename_ops(root: Path) -> list[RenameOp]:
 
     ops: list[RenameOp] = []
 
-    for directory, files in iter_mp4_files_by_directory(root):
+    for directory, files in iter_video_files_by_directory(root):
         planned: list[tuple[Path, str, Optional[int]]] = []
 
         for path in files:
