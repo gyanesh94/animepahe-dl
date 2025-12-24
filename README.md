@@ -65,9 +65,6 @@ git push origin master
 - [How to use](#how-to-use)
   - [Example](#example)
 - [Disclaimer](#disclaimer)
-- [You may like...](#you-may-like)
-  - [Don't like animepahe? Want an alternative?](#dont-like-animepahe-want-an-alternative)
-  - [Want to know when the new episode of your favorite anime will be released?](#want-to-know-when-the-new-episode-of-your-favorite-anime-will-be-released)
 
 ## Dependency
 
@@ -79,7 +76,7 @@ git push origin master
 
 ## How to use
 
-```
+```text
 Usage:
   ./animepahe-dl.sh [-a <anime name>] [-s <anime_slug>] [-e <episode_num1,num2,num3-num4...>] [-r <resolution>] [-t <num>] [-l] [-d]
 
@@ -120,7 +117,7 @@ $ ./animepahe-dl.sh -a 'attack on titan'
 - By default, anime slug/uuid is stored in `./anime.list` file. Be aware that the value of anime slug/uuid often changes, not permanent. Download "One Punch Man" season 2 episode 3:
 
 ```bash
-$ ./animepahe-dl.sh -s 308f5756-6715-e404-998d-92f16b9d9858 -e 3
+./animepahe-dl.sh -s 308f5756-6715-e404-998d-92f16b9d9858 -e 3
 ```
 
 - List "One Punch Man" season 2 all episodes:
@@ -200,7 +197,7 @@ $ ./animepahe-dl.sh -a 'samurai 7' -e 1 -o eng
 - Enable parallel jobs to download faster:
 
 ```bash
-$ ./animepahe-dl.sh -a jujutsu -e 1 -t 100
+./animepahe-dl.sh -a jujutsu -e 1 -t 100
 ```
 
 :warning: Be aware that the parallel download feature can be sometimes unstable, depending on the server side throttling. But usually, it should be stable with a number of threads below 50.
@@ -215,23 +212,9 @@ $ ./animepahe-dl.sh -s 308f5756-6715-e404-998d-92f16b9d9858 -e 5 -l
 It's useful to toss m3u8 into media player and stream:
 
 ```bash
-$ mpv --http-header-fields="Referer: https://kwik.cx/" "$(./animepahe-dl.sh -s 308f5756-6715-e404-998d-92f16b9d9858 -e 5 -l)"
+mpv --http-header-fields="Referer: https://kwik.cx/" "$(./animepahe-dl.sh -s 308f5756-6715-e404-998d-92f16b9d9858 -e 5 -l)"
 ```
 
 ## Disclaimer
 
 The purpose of this script is to download anime episodes in order to watch them later in case when Internet is not available. Please do NOT copy or distribute downloaded anime episodes to any third party. Watch them and delete them afterwards. Please use this script at your own responsibility.
-
-## You may like...
-
-### Don't like animepahe? Want an alternative?
-
-Check out [twistmoe-dl](https://github.com/KevCui/twistmoe-dl)
-
-### Want to know when the new episode of your favorite anime will be released?
-
-Check out this script [tvdb-cli](https://github.com/KevCui/tvdb-cli)
-
----
-
-<a href="https://www.buymeacoffee.com/kevcui" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-orange.png" alt="Buy Me A Coffee" height="60px" width="217px"></a>
