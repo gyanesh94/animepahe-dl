@@ -1,32 +1,50 @@
 """Rename anime episode video files recursively.
 
-Rules:
+Rules
 1) If a filename starts with "AnimePahe", apply AnimePahe cleanup:
    - Remove the leading "AnimePahe" token.
-   - Replace underscores with spaces.
-   - Collapse repeated whitespace.
+   - Replace "_" with spaces.
+   - Collapse multiple spaces into one.
    - Normalize "Eng Dub" -> "(Eng)".
    - Truncate everything after the episode number.
 
-2) After cleanup (or for non-AnimePahe names), zero-pad the last episode number
-   in each directory to a consistent width (minimum 2 digits).
+2) After cleanup (or for non-AnimePahe names), zero-pad the *episode number* only
+   when it is the trailing numeric token in the filename stem (i.e., immediately
+   before the file extension). Existing leading zeros are preserved.
 
-The renaming is performed recursively for all subdirectories for common video extensions.
+   Examples:
+   - "Show Name 1.mp4" -> "Show Name 01.mp4"
+   - "Show Name 019.mp4" stays "Show Name 019.mp4"
+   - "019. The Tournament Begins.mp4" stays unchanged (number is not trailing)
 
-Examples:
+Traversal
+- Recursively scans all subdirectories under --root.
+- Renames only common video extensions: .mp4, .mkv, .avi, .mov, .m4v, .webm, .wmv, .ts
+- You can skip directories (and their subtrees) by providing one or more ignore tags.
+  Any directory whose name contains a tag substring will be skipped.
+
+Examples (AnimePahe)
 - "AnimePahe_Shigatsu_wa_Kimi_no_Uso_-_Moments_-_01_BD_1080p_Asakura.mp4"
   -> "Shigatsu wa Kimi no Uso - Moments - 01.mp4"
+- "AnimePahe_Shigatsu_wa_Kimi_no_Uso_-_01_BD_1080p_SumiSora-CASO.mp4"
+  -> "Shigatsu wa Kimi no Uso - 01.mp4"
 - "AnimePahe_Dragon_Ball_Z_Movie_01_-_Ora_no_Gohan_wo_Kaese_Eng_Dub_-_01_BD_1080p_a-S.mp4"
   -> "Dragon Ball Z Movie 01 - Ora no Gohan wo Kaese (Eng) - 01.mp4"
-- "Ameku M_D__ Doctor Detective 1.mp4"
-  -> "Ameku M_D__ Doctor Detective 01.mp4"
 
-Run:
+Run
+- Dry run (full paths):
   python rename_animepahe_files.py --root ./ --dry-run
+
+- Dry run (filenames only):
   python rename_animepahe_files.py --root ./ --dry-run --name-only
+
+- Skip directories containing a tag (repeatable):
+  python rename_animepahe_files.py --root ./ --dry-run --ignore-dir-tag [skip] --ignore-dir-tag _ignore_
+
+- Execute:
   python rename_animepahe_files.py --root ./
 
-Run tests:
+Run tests
   pytest -q rename_animepahe_files.py
 """
 
@@ -128,10 +146,9 @@ def clean_animepahe_stem(stem: str) -> str:
     matches = list(pattern.finditer(cleaned))
     if matches:
         last = matches[-1]
-        cleaned = (cleaned[: last.end("ep")]).strip()
-        return cleaned
+        return cleaned[: last.end("ep")].strip()
 
-    # Fallback: if no quality token match, truncate after the last standalone number.
+    # Fallback: truncate after the last standalone number.
     last_num = re.search(r"(\d+)(?!.*\d)", cleaned)
     if last_num:
         cleaned = cleaned[: last_num.end(1)].strip()
@@ -154,6 +171,7 @@ def extract_trailing_int(text: str) -> Optional[int]:
     match = re.search(r"(\d+)\s*$", text)
     if not match:
         return None
+
     try:
         return int(match.group(1))
     except ValueError:
@@ -187,15 +205,48 @@ def determine_episode_width(episode_numbers: Iterable[int]) -> int:
     nums = list(episode_numbers)
     if not nums:
         return 2
+
     max_num = max(nums)
     return max(2, len(str(max_num)))
 
 
-def iter_video_files_by_directory(root: Path) -> Iterator[tuple[Path, list[Path]]]:
-    """Yield (directory, video_files_in_directory) for all directories under root."""
+def should_ignore_directory(path: Path, ignore_dir_tags: list[str]) -> bool:
+    """Return True if any ignore tag is present in any directory component."""
 
-    for dirpath, _, filenames in os.walk(root):
+    if not ignore_dir_tags:
+        return False
+
+    return any(
+        any(tag in part for tag in ignore_dir_tags)
+        for part in path.parts
+    )
+
+
+def iter_video_files_by_directory(
+    root: Path,
+    *,
+    ignore_dir_tags: Optional[list[str]] = None,
+) -> Iterator[tuple[Path, list[Path]]]:
+    """Yield (directory, video_files_in_directory) for all directories under root.
+
+    If `ignore_dir_tags` is provided, any directory whose name contains one of the
+    tags will be skipped, and its subtree will not be traversed.
+    """
+
+    ignore_dir_tags = ignore_dir_tags or []
+
+    for dirpath, dirnames, filenames in os.walk(root):
         directory = Path(dirpath)
+
+        # Prune traversal into ignored subdirectories.
+        if ignore_dir_tags:
+            dirnames[:] = [
+                d for d in dirnames if not any(tag in d for tag in ignore_dir_tags)
+            ]
+
+        if should_ignore_directory(directory, ignore_dir_tags):
+            continue
+
         files: list[Path] = []
 
         for name in filenames:
@@ -210,12 +261,17 @@ def iter_video_files_by_directory(root: Path) -> Iterator[tuple[Path, list[Path]
             yield directory, files
 
 
-def build_rename_ops(root: Path) -> list[RenameOp]:
-    """Build rename operations for all mp4 files under root."""
+def build_rename_ops(
+    root: Path,
+    *,
+    ignore_dir_tags: Optional[list[str]] = None,
+) -> list[RenameOp]:
+    """Build rename operations for all video files under root."""
 
     ops: list[RenameOp] = []
+    ignore_dir_tags = ignore_dir_tags or []
 
-    for directory, files in iter_video_files_by_directory(root):
+    for _, files in iter_video_files_by_directory(root, ignore_dir_tags=ignore_dir_tags):
         planned: list[tuple[Path, str, Optional[int]]] = []
 
         for path in files:
@@ -226,9 +282,7 @@ def build_rename_ops(root: Path) -> list[RenameOp]:
             ep_num = extract_trailing_int(stem)
             planned.append((path, stem, ep_num))
 
-        width = determine_episode_width(
-            ep for _, _, ep in planned if ep is not None
-        )
+        width = determine_episode_width(ep for _, _, ep in planned if ep is not None)
 
         for src, cleaned_stem, ep_num in planned:
             new_stem = cleaned_stem
@@ -263,6 +317,7 @@ def format_rename_op(op: RenameOp, *, name_only: bool) -> str:
         return f"DRY-RUN: {op.src.name} -> {op.dst.name}"
 
     return f"DRY-RUN: {op.src} -> {op.dst}"
+
 
 def apply_rename_ops(
     ops: list[RenameOp],
@@ -312,10 +367,11 @@ def rename_files_recursively(
     *,
     dry_run: bool = False,
     name_only: bool = False,
+    ignore_dir_tags: Optional[list[str]] = None,
 ) -> list[RenameOp]:
     """Plan and apply renames under root."""
 
-    ops = build_rename_ops(root)
+    ops = build_rename_ops(root, ignore_dir_tags=ignore_dir_tags)
     apply_rename_ops(ops, dry_run=dry_run, name_only=name_only)
     return ops
 
@@ -338,13 +394,27 @@ def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         action="store_true",
         help="With --dry-run, print only filenames (no full paths)",
     )
+    parser.add_argument(
+        "--ignore-dir-tag",
+        action="append",
+        default=[],
+        help=(
+            "Skip any directory (and its subtree) whose name contains this tag. "
+            "Repeatable. Example: --ignore-dir-tag [skip]"
+        ),
+    )
     return parser.parse_args(argv)
 
 
 def main() -> None:
     args = _parse_args()
     root = Path(args.root).expanduser().resolve()
-    rename_files_recursively(root, dry_run=args.dry_run, name_only=args.name_only)
+    rename_files_recursively(
+        root,
+        dry_run=args.dry_run,
+        name_only=args.name_only,
+        ignore_dir_tags=args.ignore_dir_tag,
+    )
 
 
 if __name__ == "__main__":
@@ -390,7 +460,6 @@ def test_build_rename_ops_zero_pads_per_directory(tmp_path: Path) -> None:
     d = tmp_path / "show"
     d.mkdir()
 
-    # Create files that should become 01 and 10.
     f1 = d / "Ameku M_D__ Doctor Detective 1.mp4"
     f2 = d / "Ameku M_D__ Doctor Detective 10.mp4"
     f1.write_bytes(b"")
@@ -398,7 +467,6 @@ def test_build_rename_ops_zero_pads_per_directory(tmp_path: Path) -> None:
 
     ops = build_rename_ops(tmp_path)
 
-    # Exactly one op for f1 (f2 already OK for width=2).
     assert any(op.src == f1 and op.dst.name.endswith("01.mp4") for op in ops)
     assert not any(op.src == f2 for op in ops)
 
@@ -422,11 +490,22 @@ def test_episode_padding_only_applies_to_trailing_number() -> None:
         replace_trailing_int_with_zfill("019. The Tournament Begins", 4)
         == "019. The Tournament Begins"
     )
-    assert (
-        replace_trailing_int_with_zfill("Episode 019", 2)
-        == "Episode 019"
-    )
-    assert (
-        replace_trailing_int_with_zfill("Episode 19", 2)
-        == "Episode 19"
-    )
+    assert replace_trailing_int_with_zfill("Episode 019", 2) == "Episode 019"
+    assert replace_trailing_int_with_zfill("Episode 19", 2) == "Episode 19"
+
+
+def test_ignore_dir_tag_skips_subtree(tmp_path: Path) -> None:
+    keep_dir = tmp_path / "keep"
+    skip_dir = tmp_path / "[skip]"
+    keep_dir.mkdir()
+    skip_dir.mkdir()
+
+    keep_file = keep_dir / "Show 1.mp4"
+    skip_file = skip_dir / "Show 1.mp4"
+    keep_file.write_bytes(b"")
+    skip_file.write_bytes(b"")
+
+    ops = build_rename_ops(tmp_path, ignore_dir_tags=["[skip]"])
+
+    assert any(op.src == keep_file for op in ops)
+    assert not any(op.src == skip_file for op in ops)
