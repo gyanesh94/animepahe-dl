@@ -139,17 +139,19 @@ def clean_animepahe_stem(stem: str) -> str:
     return cleaned
 
 
-def extract_last_int(text: str) -> Optional[int]:
-    """Extract the last integer in a string.
+def extract_trailing_int(text: str) -> Optional[int]:
+    """Extract an integer only if it appears at the end of the string.
+
+    This treats the episode number as the trailing numeric token in the stem.
 
     Args:
         text: Any string.
 
     Returns:
-        The last integer found, or None if no digits are present.
+        The trailing integer, or None if the string does not end with digits.
     """
 
-    match = re.search(r"(\d+)(?!.*\d)", text)
+    match = re.search(r"(\d+)\s*$", text)
     if not match:
         return None
     try:
@@ -158,16 +160,22 @@ def extract_last_int(text: str) -> Optional[int]:
         return None
 
 
-def replace_last_int_with_zfill(text: str, width: int) -> str:
-    """Replace the last integer in text with a zero-filled version."""
+def replace_trailing_int_with_zfill(text: str, width: int) -> str:
+    """Zero-pad a trailing integer in text.
 
-    match = re.search(r"(\d+)(?!.*\d)", text)
+    Only applies if the string ends with digits (optionally followed by spaces).
+    Preserves existing leading zeros; it will only increase the width when needed
+    and will never reduce the number of digits.
+    """
+
+    match = re.search(r"(\d+)(\s*)$", text)
     if not match:
         return text
 
-    number = int(match.group(1))
-    padded = str(number).zfill(width)
-    return f"{text[:match.start(1)]}{padded}{text[match.end(1):]}"
+    digits = match.group(1)
+    trailing_ws = match.group(2)
+    padded = digits if len(digits) >= width else digits.zfill(width)
+    return f"{text[:match.start(1)]}{padded}{trailing_ws}"
 
 
 def determine_episode_width(episode_numbers: Iterable[int]) -> int:
@@ -215,7 +223,7 @@ def build_rename_ops(root: Path) -> list[RenameOp]:
             if stem.startswith(_ANIMEPAHE_PREFIX):
                 stem = clean_animepahe_stem(stem)
 
-            ep_num = extract_last_int(stem)
+            ep_num = extract_trailing_int(stem)
             planned.append((path, stem, ep_num))
 
         width = determine_episode_width(
@@ -225,7 +233,7 @@ def build_rename_ops(root: Path) -> list[RenameOp]:
         for src, cleaned_stem, ep_num in planned:
             new_stem = cleaned_stem
             if ep_num is not None:
-                new_stem = replace_last_int_with_zfill(cleaned_stem, width)
+                new_stem = replace_trailing_int_with_zfill(cleaned_stem, width)
 
             dst = src.with_name(f"{new_stem}{src.suffix}")
             if dst != src:
@@ -373,7 +381,7 @@ def test_clean_animepahe_stem_examples() -> None:
 
 
 def test_episode_padding_min_two_digits() -> None:
-    assert replace_last_int_with_zfill("Ameku M_D__ Doctor Detective 1", 2) == (
+    assert replace_trailing_int_with_zfill("Ameku M_D__ Doctor Detective 1", 2) == (
         "Ameku M_D__ Doctor Detective 01"
     )
 
@@ -403,3 +411,22 @@ def test_format_rename_op_name_only(tmp_path: Path) -> None:
     assert format_rename_op(op, name_only=True) == "DRY-RUN: Ep 1.mp4 -> Ep 01.mp4"
     assert str(src) in format_rename_op(op, name_only=False)
     assert str(dst) in format_rename_op(op, name_only=False)
+
+
+def test_episode_padding_only_applies_to_trailing_number() -> None:
+    assert (
+        replace_trailing_int_with_zfill("019. The Tournament Begins", 2)
+        == "019. The Tournament Begins"
+    )
+    assert (
+        replace_trailing_int_with_zfill("019. The Tournament Begins", 4)
+        == "019. The Tournament Begins"
+    )
+    assert (
+        replace_trailing_int_with_zfill("Episode 019", 2)
+        == "Episode 019"
+    )
+    assert (
+        replace_trailing_int_with_zfill("Episode 19", 2)
+        == "Episode 19"
+    )
