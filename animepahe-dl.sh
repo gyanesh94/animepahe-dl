@@ -56,6 +56,7 @@ set_var() {
     _ANIME_RESOLUTION="1080"
     _ANIME_AUDIO="jpn"
     # _ANIME_AUDIO="eng"
+    _EP_PAD_WIDTH=1
 }
 
 set_args() {
@@ -175,6 +176,11 @@ download_source() {
     mkdir -p "$_SCRIPT_PATH/$_ANIME_NAME"
 
     echo "$d" > "$_SCRIPT_PATH/$_ANIME_NAME/$_SOURCE_FILE"
+
+    # Determine padding width based on total/max episode number
+    local w
+    w=$("$_JQ" -r '[.data[].episode|tonumber]|max|floor|tostring|length' "$_SCRIPT_PATH/$_ANIME_NAME/$_SOURCE_FILE" 2>/dev/null || echo "1")
+    [[ "$w" =~ ^[0-9]+$ && "$w" -gt 0 ]] && _EP_PAD_WIDTH="$w" || _EP_PAD_WIDTH=1
 }
 
 get_episode_link() {
@@ -227,6 +233,16 @@ get_playlist_link() {
         | sed -E "s/.*const source='//")"
 
     echo "$l"
+}
+
+format_episode_num() {
+    # $1: episode number string
+    local n="$1"
+    if [[ -n "${_EP_PAD_WIDTH:-}" && "$n" =~ ^[0-9]+$ ]]; then
+        printf "%0${_EP_PAD_WIDTH}d" "$n"
+    else
+        printf "%s" "$n"
+    fi
 }
 
 download_episodes() {
@@ -340,8 +356,9 @@ decrypt_segments() {
 
 download_episode() {
     # $1: episode number
-    local num="$1" l pl v erropt='' extpicky=''
-    v="$_SCRIPT_PATH/${_ANIME_NAME}/${num}.mp4"
+    local num="$1" ep l pl v erropt='' extpicky=''
+    ep="$(format_episode_num "$num")"
+    v="$_SCRIPT_PATH/${_ANIME_NAME}/${ep}.mp4"
 
     l=$(get_episode_link "$num")
     [[ "$l" != *"/"* ]] && print_warn "Wrong download link or episode $1 not found!" && return
@@ -361,7 +378,7 @@ download_episode() {
             local opath plist cpath fname
             fname="file.list"
             cpath="$(pwd)"
-            opath="$_SCRIPT_PATH/$_ANIME_NAME/${num}"
+            opath="$_SCRIPT_PATH/$_ANIME_NAME/${ep}"
             plist="${opath}/playlist.m3u8"
             rm -rf "$opath"
             mkdir -p "$opath"
@@ -382,7 +399,7 @@ download_episode() {
             [[ -z "${_DEBUG_MODE:-}" ]] && rm -rf "$opath" || return 0
         else
             # "$_FFMPEG" $extpicky -headers "Referer: $_REFERER_URL" -i "$pl" -c copy $erropt -y "$v"
-            "$_YTDL" --add-headers "Referer: $l" -N 20 -t mp4 -o "$_SCRIPT_PATH/$_ANIME_NAME/$_ANIME_NAME ${num}.mp4" "$pl"
+            "$_YTDL" --add-headers "Referer: $l" -N 20 -t mp4 -o "$_SCRIPT_PATH/$_ANIME_NAME/$_ANIME_NAME ${ep}.mp4" "$pl"
         fi
     else
         echo "$pl"
