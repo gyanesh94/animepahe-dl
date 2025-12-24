@@ -23,6 +23,7 @@ Examples:
 
 Run:
   python rename_animepahe_files.py --root ./ --dry-run
+  python rename_animepahe_files.py --root ./ --dry-run --name-only
   python rename_animepahe_files.py --root ./
 
 Run tests:
@@ -247,7 +248,20 @@ def _validate_no_destination_collisions(ops: list[RenameOp]) -> None:
         seen[op.dst] = op.src
 
 
-def apply_rename_ops(ops: list[RenameOp], *, dry_run: bool) -> None:
+def format_rename_op(op: RenameOp, *, name_only: bool) -> str:
+    """Format a rename operation for display."""
+
+    if name_only:
+        return f"DRY-RUN: {op.src.name} -> {op.dst.name}"
+
+    return f"DRY-RUN: {op.src} -> {op.dst}"
+
+def apply_rename_ops(
+    ops: list[RenameOp],
+    *,
+    dry_run: bool,
+    name_only: bool,
+) -> None:
     """Apply rename operations safely.
 
     Uses a two-phase rename via temporary filenames when needed to avoid
@@ -256,7 +270,7 @@ def apply_rename_ops(ops: list[RenameOp], *, dry_run: bool) -> None:
 
     if dry_run:
         for op in ops:
-            print(f"DRY-RUN: {op.src} -> {op.dst}")
+            print(format_rename_op(op, name_only=name_only))
         return
 
     src_set = {op.src for op in ops}
@@ -285,11 +299,16 @@ def apply_rename_ops(ops: list[RenameOp], *, dry_run: bool) -> None:
         src.rename(dst)
 
 
-def rename_files_recursively(root: Path, *, dry_run: bool = False) -> list[RenameOp]:
+def rename_files_recursively(
+    root: Path,
+    *,
+    dry_run: bool = False,
+    name_only: bool = False,
+) -> list[RenameOp]:
     """Plan and apply renames under root."""
 
     ops = build_rename_ops(root)
-    apply_rename_ops(ops, dry_run=dry_run)
+    apply_rename_ops(ops, dry_run=dry_run, name_only=name_only)
     return ops
 
 
@@ -306,13 +325,18 @@ def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         action="store_true",
         help="Print planned renames without changing files",
     )
+    parser.add_argument(
+        "--name-only",
+        action="store_true",
+        help="With --dry-run, print only filenames (no full paths)",
+    )
     return parser.parse_args(argv)
 
 
 def main() -> None:
     args = _parse_args()
     root = Path(args.root).expanduser().resolve()
-    rename_files_recursively(root, dry_run=args.dry_run)
+    rename_files_recursively(root, dry_run=args.dry_run, name_only=args.name_only)
 
 
 if __name__ == "__main__":
@@ -369,3 +393,13 @@ def test_build_rename_ops_zero_pads_per_directory(tmp_path: Path) -> None:
     # Exactly one op for f1 (f2 already OK for width=2).
     assert any(op.src == f1 and op.dst.name.endswith("01.mp4") for op in ops)
     assert not any(op.src == f2 for op in ops)
+
+
+def test_format_rename_op_name_only(tmp_path: Path) -> None:
+    src = tmp_path / "a" / "Ep 1.mp4"
+    dst = tmp_path / "a" / "Ep 01.mp4"
+    op = RenameOp(src=src, dst=dst)
+
+    assert format_rename_op(op, name_only=True) == "DRY-RUN: Ep 1.mp4 -> Ep 01.mp4"
+    assert str(src) in format_rename_op(op, name_only=False)
+    assert str(dst) in format_rename_op(op, name_only=False)
