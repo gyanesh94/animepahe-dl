@@ -2,6 +2,63 @@
 
 > Download anime videos from [animepahe](https://animepahe.com/) in terminal
 
+## Forked Repo
+
+This is a forked repo. [Original repo](https://github.com/KevCui/animepahe-dl)
+
+To fetch latest updates from the original repo, run:
+
+1. git clone this repo locally
+
+    ```bash
+    git clone https://github.com/gyanesh94/animepahe-dl.git
+    ```
+
+1. Verify current remotes
+
+    ```bash
+    git remote -v
+    ```
+
+    If upstream not found, add it:
+
+    ```bash
+    git remote add upstream https://github.com/KevCui/animepahe-dl.git
+    ```
+
+1. Disable the "push" for the upstream
+
+    ```bash
+    git remote set-url --push upstream no_push
+    ```
+
+    Optional, make plain `git push` default to origin
+
+    ```bash
+    git config remote.pushDefault origin
+    ```
+
+1. Fetch latest updates from the upstream and apply the changes as desired
+
+    ```bash
+    git fetch upstream
+    ```
+
+1. Rebase your current branch onto upstream's master branch
+
+    ```bash
+    git rebase upstream/master
+    ```
+
+Final workflow looks like
+
+```bash
+git checkout master
+git fetch upstream
+git rebase upstream/master
+git push origin master
+```
+
 ## Table of Contents
 
 - [Dependency](#dependency)

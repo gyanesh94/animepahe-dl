@@ -39,7 +39,7 @@ Run
   python rename_animepahe_files.py --root ./ --dry-run --name-only
 
 - Skip directories containing a tag (repeatable):
-  python rename_animepahe_files.py --root ./ --dry-run --ignore-dir-tag [skip] --ignore-dir-tag _ignore_
+  python rename_animepahe_files.py --root ./ --dry-run --ignore-dir-tag "[skip]" --ignore-dir-tag "_ignore_"
 
 - Execute:
   python rename_animepahe_files.py --root ./
